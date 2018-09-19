@@ -35,6 +35,7 @@ object BigTable {
         val opts = new BigtableOptions.Builder()
           .setProjectId(projectId)
           .setInstanceId(instanceId)
+          .setUserAgent("Spark")
           .build()
         sharedSession = new BigtableSession(opts)
       }
