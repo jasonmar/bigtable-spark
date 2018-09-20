@@ -39,7 +39,7 @@ object BigTableExample {
     }
 
     // TODO implement your own serialization
-    def toBytes: Array[Byte] = {
+    def bytes: Array[Byte] = {
       val buf = ByteBuffer.allocate(data.length*8)
       val lb = buf.asLongBuffer()
       var i = 0
@@ -50,17 +50,16 @@ object BigTableExample {
       buf.array()
     }
 
-    def toWriteable(family: String, column: String, rowKey: String): Seq[(String, BigTable.Writeable)] = {
-      val writeable = BigTable.Writeable(toBytes, family, column)
+    def toWriteable(family: String, column: String, rowKey: String): Seq[(String, Array[Byte])] = {
       // TODO come up with your own logic for deciding when multiple row keys are needed
       if (rowKey.startsWith("sorted#")) { // example use of prefix to determine key elements
         Seq(
-          (rowKey + s"#amt#${data(0)}", writeable), // sorted by value 0
-          (rowKey + s"#qty#${data(1)}", writeable)  // sorted by value 1
+          (rowKey + s"#v0#${data(0)}", bytes), // sorted by value 0
+          (rowKey + s"#v1#${data(1)}", bytes)  // sorted by value 1
         )
       } else {
         Seq(
-          (rowKey, writeable)
+          (rowKey, bytes)
         )
       }
     }
@@ -84,7 +83,7 @@ object BigTableExample {
     val data: RDD[(String, Reduceable)] = // TODO load data from somewhere
       Seq.empty[(String,Reduceable)].toDS().rdd
 
-    val rdd: RDD[(String,BigTable.Writeable)] =
+    val rdd: RDD[(String,Array[Byte])] =
       data
         .reduceByKey(_ + _)
         .flatMap{tuple =>
@@ -92,7 +91,7 @@ object BigTableExample {
           data.toWriteable(family, column, rowKey)
         }
 
-    BigTable.write(project, instanceId, table, BatchSize, rdd)
+    BigTable.write(project, instanceId, table, family, column, BatchSize, rdd)
 
     spark.stop()
   }

@@ -43,45 +43,67 @@ object BigTable {
     sharedSession.getDataClient
   }
 
-  def buildMutateRowsRequest(rows: Seq[(String,Writeable)], table: String): MutateRowsRequest = {
-    val b = MutateRowsRequest.newBuilder().setTableName(table)
-    rows.foreach{t =>
-      b.addEntriesBuilder()
-        .setRowKey(ByteString.copyFromUtf8(t._1))
-        .addMutationsBuilder()
-        .getSetCellBuilder
-        .setFamilyName(t._2.family)
-        .setColumnQualifier(ByteString.copyFromUtf8(t._2.column))
-        .setValue(ByteString.copyFrom(t._2.bytes))
-    }
-    b.build()
+  /** Add a mutation to a request
+    * mutateRowsRequest is expected to have table already set
+    * default entry is expected to have family and column already set
+    */
+  def addMutation(rowKey: String,
+                  bytes: Array[Byte],
+                  mutateRowsRequest: MutateRowsRequest.Builder,
+                  entry: MutateRowsRequest.Entry.Builder): MutateRowsRequest.Builder = {
+    entry.setRowKey(ByteString.copyFromUtf8(rowKey))
+      .getMutationsBuilder(0)
+      .getSetCellBuilder
+      .setValue(ByteString.copyFrom(bytes))
+    mutateRowsRequest.addEntries(entry)
   }
 
-  /** Contains bytes to be written to a specific column and column family */
-  case class Writeable(bytes: Array[Byte], family: String, column: String)
-
-  class Writer(projectId: String, instanceId: String, table: String, batchSize: Int) extends Serializable {
+  class Writer(projectId: String,
+               instanceId: String,
+               table: String,
+               family: String,
+               column: String,
+               batchSize: Int) extends Serializable {
     @transient private val client: BigtableDataClient =
       getSharedClient(projectId, instanceId)
 
-    def write(rows: Iterator[(String,Writeable)]): Iterator[MutateRowsResponse] = {
+    val defaultRequest: MutateRowsRequest.Builder =
+      MutateRowsRequest.newBuilder()
+        .setTableName(table)
+
+    val defaultEntry: MutateRowsRequest.Entry.Builder = {
+      val entry = MutateRowsRequest.Entry.newBuilder()
+      entry.addMutationsBuilder()
+        .getSetCellBuilder
+        .setFamilyName(family)
+        .setColumnQualifier(ByteString.copyFromUtf8(column))
+      entry
+    }
+
+    def write(rows: Iterator[(String, Array[Byte])]): Iterator[MutateRowsResponse] = {
       import scala.collection.JavaConverters.iterableAsScalaIterableConverter
       rows.grouped(batchSize)
-        .map(batch => client.mutateRows(buildMutateRowsRequest(batch, table)))
+        .map{batch =>
+          val mutateRowsRequest = batch.foldLeft(defaultRequest.clone){(builder, row) =>
+            addMutation(row._1, row._2, builder, defaultEntry.clone)
+          }
+          client.mutateRows(mutateRowsRequest.build())
+        }
         .flatMap(_.asScala)
     }
   }
 
-  /** Write rows to the specified table
-    * Each row is a tuple containing Row Key and a Writeable
+  /** Write rows to the specified table, family, column
     */
   def write(project: String,
             instanceId: String,
             table: String,
+            family: String,
+            column: String,
             batchSize: Int,
-            rows: RDD[(String, Writeable)]): RDD[MutateRowsResponse] = {
+            rows: RDD[(String, Array[Byte])]): RDD[MutateRowsResponse] = {
     rows.mapPartitions{rows =>
-      new BigTable.Writer(project, instanceId, table, batchSize)
+      new BigTable.Writer(project, instanceId, table, family, column, batchSize)
         .write(rows)
     }
   }
