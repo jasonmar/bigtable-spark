@@ -38,5 +38,6 @@ assemblyMergeStrategy in assembly := {
 }
 
 assemblyShadeRules in assembly := Seq(
-  ShadeRule.rename("com.google.common.**" -> "shadegooglecommon.@1").inAll
+  ShadeRule.rename("com.google.common.**" -> "shadegooglecommon.@1").inAll,
+  ShadeRule.rename("com.google.protobuf.*" -> "shadedproto.@1").inAll
 )
