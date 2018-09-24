@@ -55,6 +55,7 @@ object BigTable {
       .getMutationsBuilder(0)
       .getSetCellBuilder
       .setValue(ByteString.copyFrom(bytes))
+      .setTimestampMicros(-1)
     mutateRowsRequest.addEntries(entry)
   }
 
@@ -69,7 +70,7 @@ object BigTable {
 
     val defaultRequest: MutateRowsRequest.Builder =
       MutateRowsRequest.newBuilder()
-        .setTableName(table)
+        .setTableName(s"projects/$projectId/instances/$instanceId/tables/$table")
 
     val defaultEntry: MutateRowsRequest.Entry.Builder = {
       val entry = MutateRowsRequest.Entry.newBuilder()
